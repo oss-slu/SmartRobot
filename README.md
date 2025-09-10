@@ -1,9 +1,30 @@
 # **SMART: SLU Mobile Autonomous Robotics Toolkit**
 ## A learning robot kit.
 
-
-### Download
-
+## Getting Started
+### Clone the repository
+```bash
+git clone https://github.com/oss-slu/SmartRobot.git
+cd SmartRobot
+```
+### Create and activate a virtual environment
+```bash
+python -m venv venv
+source venv/bin/activate   # macOS/Linux
+venv\Scripts\activate      # Windows
+```
+### Install dependencies
+```bash
+pip install -r requirements.txt
+```
+### Run the application
+```bash
+python app.py
+```
+### Open in browser
+```bash
+Visit: http://127.0.0.1:5000/
+```
 ### Support
 
 
@@ -14,10 +35,10 @@
 …
 
 
-### Copyright
+## Copyright
 
 
-### About
+## About
 - SMART is an open-source electronics platform.
 ….
 - Our services include:
