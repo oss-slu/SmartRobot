@@ -25,10 +25,10 @@ python app.py
 ```bash
 Visit: http://127.0.0.1:5000/
 ```
-### Support
+## Support
 
 
-### Purchase
+## Purchase
 - Please visit the following page to purchase our products:
 ….
 - Business customers please contact us through the following email address:
