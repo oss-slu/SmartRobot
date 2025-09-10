@@ -4,6 +4,9 @@ __pycache__/
 
 # Virtual environment
 venv/
+.venv/
+ENV/
+env/
 
 # OS files
 .DS_Store
@@ -11,3 +14,5 @@ venv/
 # IDE configs
 .vscode/
 .idea/
+
+
