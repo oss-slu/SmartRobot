@@ -1,0 +1,22 @@
+running develop
+running egg_info
+creating slu_smart.egg-info
+writing slu_smart.egg-info/PKG-INFO
+writing dependency_links to slu_smart.egg-info/dependency_links.txt
+writing entry points to slu_smart.egg-info/entry_points.txt
+writing requirements to slu_smart.egg-info/requires.txt
+writing top-level names to slu_smart.egg-info/top_level.txt
+writing manifest file 'slu_smart.egg-info/SOURCES.txt'
+reading manifest file 'slu_smart.egg-info/SOURCES.txt'
+writing manifest file 'slu_smart.egg-info/SOURCES.txt'
+running build_ext
+Creating /home/pascal/ros2_ws/install/slu_smart/lib/python3.12/site-packages/slu-smart.egg-link (link to .)
+Installing talker script to /home/pascal/ros2_ws/install/slu_smart/lib/slu_smart
+
+Installed /home/pascal/ros2_ws/build/slu_smart
+running symlink_data
+creating /home/pascal/ros2_ws/install/slu_smart/share/ament_index
+creating /home/pascal/ros2_ws/install/slu_smart/share/ament_index/resource_index
+creating /home/pascal/ros2_ws/install/slu_smart/share/ament_index/resource_index/packages
+symbolically linking /home/pascal/ros2_ws/build/slu_smart/resource/slu_smart -> /home/pascal/ros2_ws/install/slu_smart/share/ament_index/resource_index/packages
+symbolically linking /home/pascal/ros2_ws/build/slu_smart/package.xml -> /home/pascal/ros2_ws/install/slu_smart/share/slu_smart
