@@ -1,9 +1,0 @@
-source;share/slu_smart/hook/pythonpath.ps1
-source;share/slu_smart/hook/pythonpath.dsv
-source;share/slu_smart/hook/pythonpath.sh
-source;share/slu_smart/hook/ament_prefix_path.ps1
-source;share/slu_smart/hook/ament_prefix_path.dsv
-source;share/slu_smart/hook/ament_prefix_path.sh
-source;../../build/slu_smart/share/slu_smart/hook/pythonpath_develop.ps1
-source;../../build/slu_smart/share/slu_smart/hook/pythonpath_develop.dsv
-source;../../build/slu_smart/share/slu_smart/hook/pythonpath_develop.sh
