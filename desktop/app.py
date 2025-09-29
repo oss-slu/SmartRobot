@@ -5,10 +5,10 @@ app = Flask(__name__)
 # Robot status: "ON" or "OFF"
 robot_status = "OFF"
 
-# Home page
 @app.route("/")
-def home():
-    return render_template("base.html")
+def index():
+    return render_template("index.html")
+
 # My Robot page
 @app.route("/my-robot")
 def my_robot():
