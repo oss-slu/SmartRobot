@@ -1,2 +1,0 @@
-[console_scripts]
-talker = slu_smart.test_pub:main
