@@ -2,20 +2,22 @@
 
 {% block content %}
 
+<!-- Status panel -->
+<div id="status" class="status-panel">WebSocket: CONNECTING...</div>
+
 <!-- Buttons -->
 <div class="controls">
   <button id="run">Run</button>
   <button id="stop">Stop</button>
-  <button hx-get="/status" hx-target="#status">Get Status</button>
+  <button hx-get="/status" hx-target="#robot-status">Get Robot Status</button>
 </div>
 
-<!-- Status panel -->
-<div id="status" class="status-panel"></div>
+<!-- Robot status panel (separate from websocket status) -->
+<div id="robot-status" class="status-panel"></div>
 
 <!-- ROS log panel -->
 <pre id="ros-log" class="ros-log"></pre>
 
-
 <!-- Temporarily disabled until robot WebSocket is ready -->
-<!-- <script type="module" src="{{ url_for('static', filename='js/websocket.js') }}"></script> -->
+<script type="module" src="{{ url_for('static', filename='js/websocket.js') }}"></script>
 {% endblock %}

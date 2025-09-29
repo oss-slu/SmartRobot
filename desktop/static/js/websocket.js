@@ -1,54 +1,77 @@
-/*  based on the concept of https://github.com/foxglove/ws-protocol/tree/main/typescript/ws-protocol#client-template */
-// FoxgloveClient-> connects to a Foxglove WebSocket server
-// MessageWriter->help encode ROS2 messages to send over the WebSocket
-import { FoxgloveClient, MessageWriter } from "https://esm.sh/@foxglove/ws-protocol";
-
 const logEl = document.getElementById("ros-log");
-const log = msg => logEl.textContent += msg + "\n";
+const log = (msg) => { 
+  console.log(msg); 
+  logEl.textContent += msg + "\n"; 
+};
 
-// Connect to Foxglove Bridge on the Pi
-const client = new FoxgloveClient({
-  ws: new WebSocket("ws://<pi-ip>:8765")  //replace with our Pi IP
-  // In the future  we can add BLE support here for multiple ras pi
-});
-//logs when the WebSocket opens or closes
-client.on("open", () => log("Connected"));
-client.on("close", () => log("Disconnected"));
+// Import Foxglove client
+import { FoxgloveClient } from "https://esm.sh/@foxglove/ws-protocol";
 
-//subscribe to topics when advertised by robot
-//soon, we will store subscriptions in a map
-//so each topic updates a different part of the dashboard
-client.on("advertise", channels => {
-  //loop through advertised topics
-  channels.forEach(ch => {
-    log(`Topic: ${ch.topic}`);
-    //if the topic is one we want, subscribe
-    if(ch.topic === "/chatter" || ch.topic === "/sensor" || ch.topic === "/motor") {
-      //subscribe
-      client.subscribe([{ channelId: ch.id, encoding: "cdr" }]);
+const piIP = "10.178.41.99";
+const port = 8765;
+const wsUrl = `ws://${piIP}:${port}`;
+
+log(`Attempting to connect to ${wsUrl}...`);
+
+// Create WebSocket with correct subprotocol
+const ws = new WebSocket(wsUrl, "foxglove.websocket.v1");
+
+// Create Foxglove client
+const client = new FoxgloveClient({ ws });
+
+// WebSocket connection events
+ws.onopen = () => {
+  log("✓ WebSocket CONNECTED with Foxglove protocol");
+};
+
+ws.onclose = (event) => {
+  log(`✗ WebSocket DISCONNECTED (Code: ${event.code})`);
+  if (event.code === 1002) {
+    log("  → Protocol error - subprotocol mismatch");
+  }
+};
+
+ws.onerror = () => {
+  log("✗ WebSocket ERROR - Connection failed");
+};
+
+const readers = new Map();
+const topicsBySub = new Map();
+
+client.on("advertise", (channels) => {
+  log(`Advertised topics: ${channels.length}`);
+  for (const ch of channels) {
+    log(`Topic: ${ch.topic} (Channel: ${ch.id})`);
+    if (ch.topic === "/test_talker") {
+      // Subscribe correctly (number, not array)
+      const subId = client.subscribe(ch.id);
+      topicsBySub.set(subId, ch.topic);
+      // Build a CDR reader for this topic
+      if (ch.encoding === "cdr" && (ch.schemaEncoding === "ros2msg" || ch.schemaEncoding === "ros2idl")) {
+        const defs = parseMsgDef(ch.schema, { ros2: true });
+        const reader = new MessageReader(defs);
+        readers.set(subId, reader);
+      }
+      log(`✓ Subscribed to: ${ch.topic} (subId=${subId})`);
     }
-  });
+  }
 });
 
 
-//report messages received on subscribed topics
-client.on("message", msg => {
-  log(`Message on channel ${msg.channelId}, size=${msg.data.byteLength}`);
+client.on("message", (msg) => {
+    const reader = readers.get(msg.subscriptionId);
+    if (reader) {
+      const decoded = reader.readMessage(msg.data);
+      log(`  → Decoded message: ${JSON.stringify(decoded)}`);
+    } else {  
+      // No reader available, try to show as text
+    try {
+      const text = new TextDecoder().decode(msg.data);
+      log(`  → Raw message: ${text}`);
+    } catch (error) {
+      log(`  → Cannot decode message: ${error.message}`);
+    }
+    }
 });
 
-//send command to robot 
-//send "RUN" or "STOP" to /web_cmd
-function sendCommand(text) {
-  const schema = { name:"std_msgs/String", encoding:"ros2msg", data:"string data\n" };
-  client.advertise([{ id: 1, topic: "/web_cmd", schema }]);
-  const writer = new MessageWriter(schema);
-  const buffer = writer.write({ data: text });
-  client.message({ channelId:1, data: buffer });
-  log(`Sent command: ${text}`);
-  // Update local status
-  fetch(`/set_status/${text === "RUN" ? "ON" : "OFF"}`);
-}
-
-// Hook buttons
-document.getElementById("run").onclick  = () => sendCommand("RUN");
-document.getElementById("stop").onclick = () => sendCommand("STOP");
+log("WebSocket status monitoring started");
