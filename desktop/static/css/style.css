@@ -1,0 +1,61 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+header, footer {
+    background-color: #222;
+    color: #fff;
+    padding: 1rem;
+    text-align: center;
+}
+
+nav a {
+    color: #fff;
+    margin: 0 1rem;
+    text-decoration: none;
+}
+
+main {
+    padding: 2rem;
+    text-align: center;
+}
+
+/* My Robot Dashboard */
+.controls {
+    margin-bottom: 1em;
+}
+
+button {
+    margin: 0.5em;
+    padding: 1em 2em;
+    font-size: 1.1em;
+    border: none;
+    border-radius: 6px;
+    background: #0077cc;
+    color: white;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #005fa3;
+}
+
+/* Status panel */
+.status-panel {
+    margin-top: 1em;
+    font-weight: bold;
+    color: #007700;
+}
+
+/* ROS log */
+.ros-log {
+    background: #111;
+    color: #0f0;
+    padding: 1em;
+    height: 200px;
+    overflow: auto;
+    border-radius: 6px;
+    margin-top: 1em;
+}
