@@ -14,13 +14,14 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 robot_status = "OFF"
 
 def encode_ros2_string_cdr(s: str) -> bytes:
+    # ROS 2 Fast-CDR string = uint32 length INCLUDING null + bytes + '\0'
     b = s.encode("utf-8")
-    return struct.pack("<I", len(b)) + b
+    return struct.pack("<I", len(b) + 1) + b + b"\x00"  # Add the null terminator
 
 async def client_advertise_string_cmd(ws, channel_id: int, topic="/command"):
     # Advertise a client-publish channel for std_msgs/msg/String over CDR
     msg = {
-        "op": "advertise",  # Change from "clientAdvertise" to "advertise"
+        "op": "advertise", 
         "channels": [{
             "id": channel_id,
             "topic": topic,
@@ -33,12 +34,12 @@ async def client_advertise_string_cmd(ws, channel_id: int, topic="/command"):
 class FoxgloveBridge:
     def __init__(self):
         self.websocket = None
-        self.pi_ip = "10.178.42.178" #always change--> check it!
+        self.pi_ip = "10.178.43.25" #always change--> check it!
         self.port = 8765
         self.running = False
         self.connected = False
         self.subscribed_topics = {}
-        self.command_channel_id = 100 
+        self.command_channel_id = 4
         
         #should add more topics here to subscribe to
         self.topics_to_subscribe = [
@@ -193,11 +194,14 @@ class FoxgloveBridge:
 
                 # Simplified frame format
                 frame = (
+                    # b"\x01"  # MESSAGE_DATA opcode
+                    # + struct.pack("<I", self.command_channel_id)  # channel ID
+                    # + struct.pack("<Q", now_ns)  # timestamp
+                    # + struct.pack("<I", seq)  # sequence
+                    # + payload  # CDR data
                     b"\x01"  # MESSAGE_DATA opcode
-                    + struct.pack("<I", self.command_channel_id)  # channel ID
-                    + struct.pack("<Q", now_ns)  # timestamp
-                    + struct.pack("<I", seq)  # sequence
-                    + payload  # CDR data
+                    + struct.pack("<I", self.command_channel_id)  # channel ID only
+                    + payload  # CDR data directly
                 )
 
                 await self.websocket.send(frame)
@@ -206,7 +210,7 @@ class FoxgloveBridge:
                 socketio.emit("log", f"Sending binary? {isinstance(frame, bytes)}; frame length={len(frame)}; header={frame[:17].hex()}")
 
                 # Wait longer to see if it works
-                await asyncio.sleep(1)  # Wait 5 seconds instead of 1
+                await asyncio.sleep(3)  
                 
         except Exception as e:
             socketio.emit("log", f"✗ Error in command sender: {e}")
