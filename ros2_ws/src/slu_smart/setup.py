@@ -13,9 +13,9 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='Pascal Sikorski',
-    maintainer_email='pascal.sikorski@slu.edu',
-    description='SLU_SMART ROS2 package for all software of the SLU SMART Robot. Currently an example hello world publisher is active',
+    maintainer='pascal',
+    maintainer_email='pascal@todo.todo',
+    description='TODO: Package description',
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={

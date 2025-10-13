@@ -1,12 +1,21 @@
 # **SMART: SLU Mobile Autonomous Robotics Toolkit**
 ## A learning robot kit.
 
-## Getting Started
+## Getting Started (ROS2 Jazzy)
 ### Clone the repository
 ```bash
 git clone https://github.com/oss-slu/SmartRobot.git
 cd SmartRobot
 ```
+### Build the ROS2 components
+```bash
+git clone https://github.com/oss-slu/SmartRobot.git
+cd ros2_ws
+*TODO, add rosdep step?*
+colcon build
+```
+
+## Getting Started (Desktop client)
 ### Create and activate a virtual environment
 ```bash
 python -m venv venv
