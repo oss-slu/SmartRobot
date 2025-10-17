@@ -1,222 +1,247 @@
 from flask import Flask, render_template, jsonify
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO
 import asyncio
 import json
 import threading
 import time
 import websockets
-import struct, time
+import struct
+import traceback
 
+# ---------------------------
+# Flask / SocketIO setup
+# ---------------------------
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 robot_status = "OFF"
 
-def encode_ros2_string_cdr(s: str) -> bytes:
-    # ROS 2 Fast-CDR string = uint32 length INCLUDING null + bytes + '\0'
-    b = s.encode("utf-8")
-    return struct.pack("<I", len(b) + 1) + b + b"\x00"  # Add the null terminator
+# ---------------------------
+# Foxglove protocol
+# ---------------------------
+# Client->Server binary frame for a message:
+#   [0]    : 0x01 (MESSAGE_DATA)
+#   [1..4] : channelId (uint32, LE)
+#   [5.. ] : payload bytes (JSON for our case)
+MESSAGE_DATA_OPCODE = b"\x01"
 
-async def client_advertise_string_cmd(ws, channel_id: int, topic="/command"):
-    # Advertise a client-publish channel for std_msgs/msg/String over CDR
+# Server->Client binary frames (when you subscribe) include a timestamp.
+# Header = opcode(1) + channelId(uint32 LE, 4) + timestamp(uint64 LE, 8) = 13 bytes
+SERVER_FRAME_HEADER_LEN = 1 + 4 + 8
+
+def build_json_payload_for_string(data_text: str) -> bytes:
+    """
+    For std_msgs/msg/String with encoding='json', the payload is simply:
+      {"data":"<your text>"}
+    encoded as UTF-8 bytes.
+    """
+    return json.dumps({"data": data_text}).encode("utf-8")
+
+async def client_advertise_string_json(ws, channel_id: int, topic="/command"):
+    """
+    Advertise a client-publish channel for std_msgs/msg/String using JSON encoding.
+    """
     msg = {
-        "op": "advertise", 
-        "channels": [{
-            "id": channel_id,
-            "topic": topic,
-            "encoding": "cdr",
-            "schemaName": "std_msgs/msg/String",
-            "schema": "string data\n"
-        }]
+        "op": "advertise",
+        "channels": [
+            {
+                "id": channel_id,
+                "topic": topic,
+                "encoding": "json",                 # <--- JSON insead of cdr
+                "schemaName": "std_msgs/msg/String",
+                "schemaEncoding": "ros2msg",        # optional but nice
+                "schema": "string data\n",
+            }
+        ],
     }
     await ws.send(json.dumps(msg))
+
+# ---------------------------
+# Foxglove Bridge Client
+# ---------------------------
 class FoxgloveBridge:
     def __init__(self):
         self.websocket = None
-        self.pi_ip = "10.178.43.25" #always change--> check it!
+        self.pi_ip = "10.178.43.127"   # <-- it changes!! check it!!
         self.port = 8765
         self.running = False
         self.connected = False
         self.subscribed_topics = {}
-        self.command_channel_id = 4
-        
-        #should add more topics here to subscribe to
-        self.topics_to_subscribe = [
-            "/test_talker"
-        ]
+        self.command_channel_id = 4     #just random num at the moment
+        # Subscribe to server topics here, will add more in the future
+        self.topics_to_subscribe = ["/test_talker"]
 
-    def extract_message_from_hex(self, hex_string):
-        """Extract message from Foxglove hex data"""
-        try:
-            # Skip the CDR header (first 32 characters = 16 bytes)
-            # The actual message starts after the header
-            message_hex = hex_string[32:]  # Skip first 32 hex chars
-            
-            # Convert hex to string
-            message_bytes = bytes.fromhex(message_hex)
-            message = message_bytes.decode('utf-8').strip('\x00')
-            return message
-        except:
-            return f"Raw: {hex_string[:50]}..."
-        
-        
     async def connect_to_pi_server(self):
-        """Connect to Foxglove WebSocket server on Raspberry Pi"""
+        """Connect to Foxglove WebSocket server on Raspberry Pi."""
         try:
-            socketio.emit('log', f"Attempting to connect to {self.pi_ip}:{self.port}...")
-            
-            # Connect with Foxglove subprotocol
+            socketio.emit("log", f"Attempting to connect to {self.pi_ip}:{self.port} …")
             self.websocket = await websockets.connect(
-                f"ws://{self.pi_ip}:{self.port}", 
-                subprotocols=["foxglove.websocket.v1"]
+                f"ws://{self.pi_ip}:{self.port}",
+                subprotocols=["foxglove.websocket.v1"],
             )
-            
             if self.websocket is None:
-                raise Exception("WebSocket connection failed - websocket is None")
-          
-            socketio.emit('log', f"✓ WebSocket CONNECTED with Foxglove protocol")
+                raise RuntimeError("WebSocket connection failed (None)")
+
+            socketio.emit("log", "✓ WebSocket CONNECTED (foxglove.websocket.v1)")
             self.running = True
             self.connected = True
-            
-            # Start command sender in background
-            asyncio.create_task(self.start_command_sender())
-        
-            # Handle incoming messages (including advertise and message events)
+
+            # Start background publisher for /command (JSON)
+            asyncio.create_task(self.start_command_sender_json())
+
+            # Read incoming control/data messages
             await self.handle_messages()
-                    
+
         except Exception as e:
-            error_msg = f"✗ WebSocket ERROR - Connection failed: {e}"
-            print(error_msg)
-            socketio.emit('log', error_msg)
+            socketio.emit("log", f"✗ WebSocket ERROR: {e}")
+            traceback.print_exc()
             self.connected = False
         finally:
             self.running = False
-            self.connected = False
             if self.websocket:
-                await self.websocket.close()
+                try:
+                    await self.websocket.close()
+                except Exception:
+                    pass
                 self.websocket = None
-                socketio.emit('log', "✗ WebSocket DISCONNECTED")
+            socketio.emit("log", "✗ WebSocket DISCONNECTED")
 
     async def handle_messages(self):
-        """Handle incoming messages from Foxglove server"""
+        """Handle incoming server messages (advertise, binary message frames, etc.)."""
         if not self.connected or self.websocket is None:
-            socketio.emit('log', "⚠️ Cannot handle messages - not connected")
+            socketio.emit("log", "⚠️ Cannot handle messages - not connected")
             return
-            
+
         try:
             async for message in self.websocket:
-                if self.running and self.connected and self.websocket is not None:
-                    try:
-                        if isinstance(message, str):
-                            # Handle text-based protocol messages
-                            data = json.loads(message)
-                            
-                            # Handle "advertise" message (available topics)
-                            if data.get("op") == "advertise" or "channels" in data:
-                                channels = data.get("channels", data.get("advertise", []))
-                                socketio.emit('log', f"📋 Advertised topics: {len(channels)}")
-                                
-                                for ch in channels:
-                                    topic = ch.get("topic", "unknown")
-                                    channel_id = ch.get("id", "unknown")
-                                    encoding = ch.get("encoding", "unknown")
-                                    
-                                    socketio.emit('log', f"Topic: {topic} (Channel: {channel_id}, Encoding: {encoding})")
-                                    
-                                    # Subscribe to topics we want
-                                    if topic in self.topics_to_subscribe:
-                                        await self.subscribe_to_channel(channel_id, topic)
-                            
-                            # Handle other protocol messages
-                            else:
-                                socketio.emit('log', f"→ Protocol message: {data}")
-                                
-                        elif isinstance(message, bytes):
-                            # Handle binary message data - extract actual message
-                            hex_data = message.hex()
-                            decoded_message = self.extract_message_from_hex(hex_data)
-                            
-                            socketio.emit('ros_message', {"data": decoded_message})
-                            socketio.emit('log', f"→ Message: {decoded_message}")
-                        
-                    except json.JSONDecodeError as e:
-                        socketio.emit('log', f"⚠️ JSON decode error: {e}")
-                    except Exception as e:
-                        socketio.emit('log', f"⚠️ Message processing error: {e}")
-                else:
+                if not (self.running and self.connected and self.websocket is not None):
                     break
-                    
+
+                try:
+                    if isinstance(message, str):
+                        # Text protocol frames (JSON control messages)
+                        data = json.loads(message)
+                        op = data.get("op")
+
+                        if op == "advertise":
+                            channels = data.get("channels", [])
+                            socketio.emit("log", f"📋 Server advertised {len(channels)} channel(s)")
+                            for ch in channels:
+                                topic = ch.get("topic", "unknown")
+                                channel_id = ch.get("id")
+                                encoding = ch.get("encoding", "unknown")
+                                socketio.emit("log", f" • {topic} (channel={channel_id}, encoding={encoding})")
+                                if topic in self.topics_to_subscribe:
+                                    await self.subscribe_to_channel(channel_id, topic)
+                        else:
+                            socketio.emit("log", f"→ Protocol message: {data}")
+
+                    elif isinstance(message, (bytes, bytearray)):
+                        # Binary data frames from server: 1+4+8 header + payload
+                        b = bytes(message)
+                        if len(b) < SERVER_FRAME_HEADER_LEN:
+                            socketio.emit("log", f"⚠️ Short binary frame (len={len(b)})")
+                            continue
+                        if b[0:1] != MESSAGE_DATA_OPCODE:
+                            socketio.emit("log", f"⚠️ Unknown opcode {b[0]:02x} in binary frame")
+                            continue
+
+                        channel_id = struct.unpack_from("<I", b, 1)[0]
+                        timestamp_ns = struct.unpack_from("<Q", b, 1 + 4)[0]
+                        payload = b[SERVER_FRAME_HEADER_LEN:]
+
+                        # Best-effort: try to treat payload as JSON; if not, show a snippet
+                        try:
+                            txt = payload.decode("utf-8")
+                            maybe_json = json.loads(txt)
+                            socketio.emit("ros_message", {
+                                "channel_id": channel_id,
+                                "timestamp_ns": timestamp_ns,
+                                "data": maybe_json,
+                            })
+                            socketio.emit("log", f"→ [{channel_id}] JSON @ {timestamp_ns} ns: {maybe_json}")
+                        except Exception:
+                            # Not JSON, just show first bytes
+                            socketio.emit("ros_message", {
+                                "channel_id": channel_id,
+                                "timestamp_ns": timestamp_ns,
+                                "data": "<non-JSON payload>",
+                            })
+                            head = payload[:32]
+                            socketio.emit("log", f"→ [{channel_id}] Non-JSON payload ({len(payload)}B) @ {timestamp_ns} ns: {head.hex()} …")
+
+                except json.JSONDecodeError as e:
+                    socketio.emit("log", f"⚠️ JSON decode error: {e}")
+                except Exception as e:
+                    socketio.emit("log", f"⚠️ Message processing error: {e}")
+                    traceback.print_exc()
+
         except Exception as e:
-            socketio.emit('log', f"⚠️ Message handling error: {e}")
+            socketio.emit("log", f"⚠️ Message handling error: {e}")
+            traceback.print_exc()
             self.connected = False
 
     async def subscribe_to_channel(self, channel_id, topic):
-        """Subscribe to a specific channel"""
+        """Subscribe to a server-advertised channel (for receiving)."""
         try:
-            # Generate a unique subscription ID
             subscription_id = len(self.subscribed_topics) + 1
-            
             subscribe_msg = {
                 "op": "subscribe",
-                "subscriptions": [{
-                    "id": subscription_id,
-                    "channelId": channel_id,
-                    "topic": topic
-                }]
+                "subscriptions": [
+                    {"id": subscription_id, "channelId": channel_id, "topic": topic}
+                ],
             }
-            
             await self.websocket.send(json.dumps(subscribe_msg))
-            
-            # Store the mapping between subscription ID and topic
             self.subscribed_topics[subscription_id] = topic
-            
-            socketio.emit('log', f"✓ Subscribed to: {topic} (subId={subscription_id}, channelId={channel_id})")
-            
+            socketio.emit("log", f"✓ Subscribed: {topic} (subId={subscription_id}, channelId={channel_id})")
         except Exception as e:
-            socketio.emit('log', f"⚠️ Error subscribing to {topic}: {e}")
+            socketio.emit("log", f"⚠️ Error subscribing to {topic}: {e}")
 
-
-    async def start_command_sender(self):
+    # ---- publishing (/command) using JSON ----
+    async def start_command_sender_json(self):
+        """Advertise /command (JSON) and periodically send 'run'."""
         try:
-            # Advertise the command channel
-            await client_advertise_string_cmd(self.websocket, self.command_channel_id, "/command")
-            socketio.emit("log", f"✓ ClientAdvertised /command (channel {self.command_channel_id})")
-
-            # Wait a moment for advertisement to be processed
-            await asyncio.sleep(2)
+            await client_advertise_string_json(self.websocket, self.command_channel_id, "/command")
+            socketio.emit("log", f"✓ ClientAdvertised /command (JSON, channel {self.command_channel_id})")
+            await asyncio.sleep(0.2)
 
             seq = 0
             while self.running and self.connected:
-                # Try a simpler message format
-                payload = encode_ros2_string_cdr("run")
-                now_ns = int(time.time() * 1e9)
-
-                # Simplified frame format
+                payload = build_json_payload_for_string("run")
                 frame = (
-                    # b"\x01"  # MESSAGE_DATA opcode
-                    # + struct.pack("<I", self.command_channel_id)  # channel ID
-                    # + struct.pack("<Q", now_ns)  # timestamp
-                    # + struct.pack("<I", seq)  # sequence
-                    # + payload  # CDR data
-                    b"\x01"  # MESSAGE_DATA opcode
-                    + struct.pack("<I", self.command_channel_id)  # channel ID only
-                    + payload  # CDR data directly
+                    MESSAGE_DATA_OPCODE
+                    + struct.pack("<I", self.command_channel_id)  # channelId (LE)
+                    + payload                                      # JSON payload
                 )
-
                 await self.websocket.send(frame)
+                socketio.emit("log", f"→ Sent /command (JSON): 'run' (seq={seq})")
                 seq += 1
-                socketio.emit("log", f"✓ Sent 'run' (seq={seq-1}) to /command")
-                socketio.emit("log", f"Sending binary? {isinstance(frame, bytes)}; frame length={len(frame)}; header={frame[:17].hex()}")
+                await asyncio.sleep(3.0)
 
-                # Wait longer to see if it works
-                await asyncio.sleep(3)  
-                
         except Exception as e:
             socketio.emit("log", f"✗ Error in command sender: {e}")
+            traceback.print_exc()
 
-# Global bridge instance
+# Global instance
 foxglove_bridge = FoxgloveBridge()
+
+# ---------------------------
+# Flask routes
+# ---------------------------
+# @app.route("/")
+# def index():
+#     try:
+#         return render_template("loading.html")
+#     except Exception:
+#         return "Loading..."
+
+# @app.route("/home")
+# def home():
+#     try:
+#         return render_template("index.html")  
+#     except Exception:
+#         return "Home page not found."
 
 @app.route("/")
 def index():
@@ -236,48 +261,27 @@ def set_status(new_status):
     robot_status = new_status
     return jsonify({"status": robot_status})
 
-# @socketio.on('connect')
-# def handle_connect():
-#     print('Web client connected')
-#     emit('log', '✓ Connected to Flask server')
-
-# @socketio.on('disconnect')
-# def handle_disconnect():
-#     print('Web client disconnected')
-#     emit('log', '✗ Disconnected from server')
-
-# @socketio.on('send_command')
-# def handle_command(data):
-#     command = data['command']
-#     print(f"Received command from browser: {command}")
-    
-#     # Create new event loop for this thread
-#     loop = asyncio.new_event_loop()
-#     asyncio.set_event_loop(loop)
-    
-#     try:
-#         loop.run_until_complete(foxglove_bridge.send_command_to_pi(command))
-#     except Exception as e:
-#         print(f"Error sending command: {e}")
-#         socketio.emit('log', f"✗ Error sending command: {e}")
-#     finally:
-#         loop.close()
-
+# ---------------------------
+# Thread runner for the asyncio foxglove client
+# ---------------------------
 def start_foxglove_client():
-    """Start the Foxglove client in background"""
+    """Run the Foxglove client in a dedicated background thread with its own event loop."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    
     try:
         loop.run_until_complete(foxglove_bridge.connect_to_pi_server())
     except Exception as e:
-        print(f"Error starting Foxglove client: {e}")
-        socketio.emit('log', f"Error starting Foxglove client: {e}")
+        socketio.emit("log", f"Error starting Foxglove client: {e}")
+        traceback.print_exc()
     finally:
         loop.close()
 
+# ---------------------------
+# Main
+# ---------------------------
 if __name__ == "__main__":
+    # Single client instance (avoid Flask reloader duplicates)
     client_thread = threading.Thread(target=start_foxglove_client, daemon=True)
     client_thread.start()
-    
-    socketio.run(app, host="0.0.0.0", port=8080, debug=True)
+
+    socketio.run(app, host="0.0.0.0", port=8080, debug=False, use_reloader=False)
