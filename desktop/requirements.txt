@@ -1,2 +1,5 @@
 Flask
+foxglove-websocket
+flask-socketio
+
 
