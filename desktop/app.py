@@ -37,6 +37,24 @@ def build_json_payload_for_string(data_text: str) -> bytes:
     encoded as UTF-8 bytes.
     """
     return json.dumps({"data": data_text}).encode("utf-8")
+def parse_cdr_string(payload: bytes) -> str:
+    """
+    Parse CDR-encoded std_msgs/msg/String payload.
+    CDR format: [encapsulation_header(4)] [string_length(4)] [string_data]
+    """
+    if len(payload) < 8:
+        return "<invalid CDR payload>"
+    
+    # Skip encapsulation header (4 bytes)
+    # Read string length (little-endian uint32)
+    string_length = struct.unpack("<I", payload[4:8])[0]
+    
+    if len(payload) < 8 + string_length:
+        return "<truncated CDR payload>"
+    
+    # Extract string data
+    string_data = payload[8:8+string_length].decode("utf-8", errors="replace")
+    return string_data
 
 async def client_advertise_string_json(ws, channel_id: int, topic="/command"):
     """
@@ -69,12 +87,14 @@ class FoxgloveBridge:
         self.connected = False
         self.subscribed_topics = {}
         self.command_channel_id = 4     #just random num at the moment
+        self.connection_loop = None
         # Subscribe to server topics here, will add more in the future
         self.topics_to_subscribe = ["/test_talker"]
 
     async def connect_to_pi_server(self):
         """Connect to Foxglove WebSocket server on Raspberry Pi."""
         try:
+            self.connection_loop = asyncio.get_event_loop()  
             socketio.emit("log", f"Attempting to connect to {self.pi_ip}:{self.port} …")
             self.websocket = await websockets.connect(
                 f"ws://{self.pi_ip}:{self.port}",
@@ -162,14 +182,24 @@ class FoxgloveBridge:
                             })
                             socketio.emit("log", f"→ [{channel_id}] JSON @ {timestamp_ns} ns: {maybe_json}")
                         except Exception:
-                            # Not JSON, just show first bytes
-                            socketio.emit("ros_message", {
-                                "channel_id": channel_id,
-                                "timestamp_ns": timestamp_ns,
-                                "data": "<non-JSON payload>",
-                            })
-                            head = payload[:32]
-                            socketio.emit("log", f"→ [{channel_id}] Non-JSON payload ({len(payload)}B) @ {timestamp_ns} ns: {head.hex()} …")
+                            # Try CDR parsing for std_msgs/msg/String
+                            try:
+                                cdr_string = parse_cdr_string(payload)
+                                socketio.emit("ros_message", {
+                                    "channel_id": channel_id,
+                                    "timestamp_ns": timestamp_ns,
+                                    "data": {"data": cdr_string},  # Match JSON format
+                                })
+                                socketio.emit("log", f"→ [{channel_id}] CDR @ {timestamp_ns} ns: {cdr_string}")
+                            except Exception as e:
+                                # Fallback to hex dump
+                                socketio.emit("ros_message", {
+                                    "channel_id": channel_id,
+                                    "timestamp_ns": timestamp_ns,
+                                    "data": "<non-JSON payload>",
+                                })
+                                head = payload[:32]
+                                socketio.emit("log", f"→ [{channel_id}] Non-JSON payload ({len(payload)}B) @ {timestamp_ns} ns: {head.hex()} …")
 
                 except json.JSONDecodeError as e:
                     socketio.emit("log", f"⚠️ JSON decode error: {e}")
@@ -200,66 +230,122 @@ class FoxgloveBridge:
 
     # ---- publishing (/command) using JSON ----
     async def start_command_sender_json(self):
-        """Advertise /command (JSON) and periodically send 'run'."""
+        """Advertise /command (JSON)"""
         try:
             await client_advertise_string_json(self.websocket, self.command_channel_id, "/command")
             socketio.emit("log", f"✓ ClientAdvertised /command (JSON, channel {self.command_channel_id})")
             await asyncio.sleep(0.2)
-
-            seq = 0
-            while self.running and self.connected:
-                payload = build_json_payload_for_string("run")
-                frame = (
-                    MESSAGE_DATA_OPCODE
-                    + struct.pack("<I", self.command_channel_id)  # channelId (LE)
-                    + payload                                      # JSON payload
-                )
-                await self.websocket.send(frame)
-                socketio.emit("log", f"→ Sent /command (JSON): 'run' (seq={seq})")
-                seq += 1
-                await asyncio.sleep(3.0)
-
+            
+            # REMOVE the automatic sending loop - just advertise and stop
+            
         except Exception as e:
             socketio.emit("log", f"✗ Error in command sender: {e}")
             traceback.print_exc()
 
+    # Add this new method to send commands on demand
+    async def send_command_once(self, text: str = "run"):
+        """Send a one-off JSON /command message"""
+        if not (self.connected and self.websocket):
+            socketio.emit("log", "⚠️ Not connected; cannot send command")
+            return
+        
+        payload = build_json_payload_for_string(text)
+        frame = MESSAGE_DATA_OPCODE + struct.pack("<I", self.command_channel_id) + payload
+        await self.websocket.send(frame)
+        socketio.emit("log", f"→ Sent /command once (JSON): '{text}'")
+        
+
+            
+
+            
+    async def send_twist_command(self, twist_data):
+        """Send a Twist message to /cmd_vel topic"""
+        if not (self.connected and self.websocket):
+            socketio.emit("log", "⚠️ Not connected; cannot send Twist command")
+            return
+        
+        # Create Twist message payload (JSON format)
+        payload = json.dumps(twist_data).encode("utf-8")
+        
+        # Create the binary frame
+        frame = (
+            MESSAGE_DATA_OPCODE
+            + struct.pack("<I", self.command_channel_id)  # channelId
+            + payload                                      # Twist JSON
+        )
+        
+        await self.websocket.send(frame)
+        socketio.emit("log", f"→ Sent Twist command: {twist_data}")
 # Global instance
 foxglove_bridge = FoxgloveBridge()
 
 # ---------------------------
 # Flask routes
 # ---------------------------
-# @app.route("/")
-# def index():
-#     try:
-#         return render_template("loading.html")
-#     except Exception:
-#         return "Loading..."
-
-# @app.route("/home")
-# def home():
-#     try:
-#         return render_template("index.html")  
-#     except Exception:
-#         return "Home page not found."
-
 @app.route("/")
 def index():
-    return render_template("index.html")
+    try:
+        return render_template("loading.html")
+    except Exception:
+        return "Loading..."
+
+@app.route("/home")
+def home():
+    try:
+        return render_template("index.html")  
+    except Exception:
+        return "Home page not found."
+
 
 @app.route("/my_robot")
 def my_robot():
     return render_template("my_robot.html")
 
-@app.route("/status")
-def status():
-    return jsonify({"status": robot_status})
+@socketio.on("connect_robot")
+def handle_connect_robot(data):
+    """Handle robot connection request from UI"""
+    ip = data.get("ip", "10.178.43.127")
+    socketio.emit("log", f"UI requested connection to {ip}")
+    
+    # Update the bridge IP and trigger connection
+    foxglove_bridge.pi_ip = ip
+    loop = asyncio.get_event_loop()
+    loop.create_task(foxglove_bridge.connect_to_pi_server())
 
-@app.route("/set_status/<new_status>")
-def set_status(new_status):
-    global robot_status
-    robot_status = new_status
-    return jsonify({"status": robot_status})
+@socketio.on("disconnect_robot")
+def handle_disconnect_robot():
+    """Handle robot disconnection request from UI"""
+    socketio.emit("log", "UI requested disconnection")
+    foxglove_bridge.running = False
+    foxglove_bridge.connected = False
+    socketio.emit("robot_disconnected")
+
+@socketio.on("check_robot_status")
+def handle_check_robot_status():
+    """Check current robot connection status"""
+    socketio.emit("robot_status", {
+        "connected": foxglove_bridge.connected,
+        "ip": foxglove_bridge.pi_ip
+    })
+
+@socketio.on("send_command")
+def handle_send_command(data):
+    if not foxglove_bridge.connected:
+        socketio.emit("log", "⚠️ Not connected to robot!")
+        return
+    
+    cmd = data.get("command", "stop")
+    speed = data.get("speed", 0)
+    socketio.emit("log", f"UI command: {cmd} @ {speed}%")
+    
+    # Send simple commands without speed number
+    if foxglove_bridge.connection_loop:
+        asyncio.run_coroutine_threadsafe(
+            foxglove_bridge.send_command_once(cmd), 
+            foxglove_bridge.connection_loop
+        )
+    else:
+        socketio.emit("log", "⚠️ No connection loop available!")
 
 # ---------------------------
 # Thread runner for the asyncio foxglove client

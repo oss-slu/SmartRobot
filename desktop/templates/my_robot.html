@@ -1,31 +1,131 @@
 {% extends "base.html" %}
 
-
 {% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/my_robot.css') }}">
+
+<div class="robot-layout">
+  <!-- Left column -->
+  <aside class="col-left">
+  <!-- Connection -->
+  <section class="card">
+    <h3>Connection</h3>
+    <label class="label">Robot IP</label>
+    <input id="robot-ip" class="input" type="text" placeholder="10.178.43.127" value="10.178.43.127">
+
+    <div class="row mt-8">
+      <button id="connect-btn" class="btn btn-primary flex-1">🔌 Connect</button>
+      <button id="disconnect-btn" class="btn btn-danger flex-1" disabled>🔌 Disconnect</button>
+    </div>
+
+  </section>
+
+    <!-- Robot Status -->
+    <section class="card">
+      <div class="card-title">
+        <h3>Robot Status</h3>
+        <span class="badge badge-green">Connected</span>
+      </div>
+
+      <div class="metric">
+        <div class="metric-head">
+          <div class="metric-label">
+            <span class="ic">🔋</span>
+            <span>Battery</span>
+          </div>
+          <span id="metric-battery-val">78.3007%</span>
+        </div>
+        <div class="bar"><div class="fill" style="width:78%"></div></div>
+      </div>
+
+      <div class="metric">
+        <div class="metric-head">
+          <div class="metric-label">
+            <span class="ic">🧠</span>
+            <span>CPU Usage</span>
+          </div>
+          <span id="metric-cpu-val">41.72%</span>
+        </div>
+        <div class="bar"><div class="fill" style="width:42%"></div></div>
+      </div>
+
+      <div class="metric">
+        <div class="metric-head">
+          <div class="metric-label">
+            <span class="ic">🌡️</span>
+            <span>Temperature</span>
+          </div>
+          <span id="metric-temp-val">48.51°C</span>
+        </div>
+        <div class="bar"><div class="fill" style="width:49%"></div></div>
+      </div>
+
+      <div class="metric">
+        <div class="metric-head">
+          <div class="metric-label">
+            <span class="ic">📡</span>
+            <span>Signal Strength</span>
+          </div>
+          <span id="metric-signal-val">97.46%</span>
+        </div>
+        <div class="bar"><div class="fill" style="width:97%"></div></div>
+      </div>
+    </section>
+  </aside>
+
+  <!-- Center column: Movement Controls -->
+  <main class="col-center card">
+    <h3>Movement Controls</h3>
+
+    <!-- Speed -->
+    <div class="speed">
+      <div class="speed-head">
+        <span>Speed</span>
+        <span id="speed-val">40%</span>
+      </div>
+      <input id="speed" class="range" type="range" min="0" max="100" value="40" />
+    </div>
+
+    <!-- Direction pad -->
+    <div class="pad">
+      <button class="pad-btn" data-cmd="move_up" title="Up">↑</button>
+      <div class="pad-row">
+        <button class="pad-btn" data-cmd="move_left" title="Left">←</button>
+        <button class="pad-btn center" data-cmd="stop" title="Stop">■</button>
+        <button class="pad-btn" data-cmd="move_right" title="Right">→</button>
+      </div>
+      <button class="pad-btn" data-cmd="move_down" title="Down">↓</button>
+    </div>
 
 
-<!-- Status panel -->
-<div id="status" class="status-panel">WebSocket: CONNECTING...</div>
+  <!-- Right column: Activity / Diagnostics -->
+  <aside class="col-right">
+    <div class="tabs">
+      <button class="tab active" data-tab="activity">Activity</button>
+      <button class="tab" data-tab="diagnostics">Diagnostics</button>
+    </div>
 
+    <section id="panel-activity" class="card tab-panel active">
+      <h3>Activity Log</h3>
+      <div id="activity-log" class="log">
+        <!-- Socket.IO pushes entries here -->
+      </div>
+    </section>
 
-<!-- Buttons -->
-<div class="controls">
-  <button id="run">Run</button>
-  <button id="stop">Stop</button>
-  <button hx-get="/status" hx-target="#robot-status">Get Robot Status</button>
+    <section id="panel-diagnostics" class="card tab-panel">
+      <h3>Diagnostics</h3>
+      <div class="diag">
+        <div class="diag-item">
+          <span>Uptime</span><span id="diag-uptime">—</span>
+        </div>
+        <div class="diag-item">
+          <span>Topics</span><span id="diag-topics">—</span>
+        </div>
+      </div>
+    </section>
+  </aside>
 </div>
 
-
-<!-- Robot status panel (separate from websocket status) -->
-<div id="robot-status" class="status-panel"></div>
-
-
-<!-- ROS log panel -->
-<pre id="ros-log" class="ros-log"></pre>
-
-<!-- SocketIO library -->
+<!-- SocketIO + external script -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
-
-<!-- Temporarily disabled until robot WebSocket is ready -->
-<script type="module" src="{{ url_for('static', filename='js/websocket.js') }}"></script>
+<script src="{{ url_for('static', filename='js/websocket.js') }}"></script>
 {% endblock %}
