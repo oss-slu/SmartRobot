@@ -14,7 +14,25 @@ const logEl = document.getElementById('activity-log');
 function addLog(kind, text) {
   const item = document.createElement('div');
   item.className = 'log-item';
-  item.innerHTML = '<span class="pill">'+ kind +'</span><div class="msg">'+ text +'</div><div class="ts">'+ new Date().toLocaleTimeString() +'</div>';
+  
+  // Create elements and use textContent to safely escape HTML
+  const pill = document.createElement('span');
+  pill.className = 'pill';
+  pill.textContent = kind;
+  
+  const msg = document.createElement('div');
+  msg.className = 'msg';
+  msg.textContent = text;
+  
+  const ts = document.createElement('div');
+  ts.className = 'ts';
+  ts.textContent = new Date().toLocaleTimeString();
+  
+  // Append to item
+  item.appendChild(pill);
+  item.appendChild(msg);
+  item.appendChild(ts);
+  
   logEl.prepend(item);
 }
 
