@@ -7,28 +7,8 @@
   const fill = document.getElementById('fill');
   const percent = document.getElementById('percent');
   const startBtn = document.getElementById('start-btn');
+  const targetUrl = '/home';
   
-  // Sanitize URL to prevent XSS attacks
-  function sanitizeUrl(url) {
-    if (!url || typeof url !== 'string') {
-      return '/';
-    }
-    // Remove any whitespace
-    url = url.trim();
-    // Reject dangerous schemes
-    if (url.match(/^(javascript:|http:|https:|data:|ftp:|\/\/)/i)) {
-      return '/';
-    }
-    // Only allow relative paths starting with /
-    if (!url.startsWith('/')) {
-      return '/';
-    }
-    return url;
-  }
-  
-  const targetUrl = sanitizeUrl(startBtn.getAttribute('data-target')) || '/';
-
-  // Progress simulation (replace with real readiness if desired)
   let p = 0;
   const tick = () => {
     const increment = p < 70 ? 4 + Math.random() * 6 : 1 + Math.random() * 3;
