@@ -34,7 +34,18 @@ python app.py
 ```bash
 Visit: http://127.0.0.1:5000/
 ```
+
+## Getting Driving (Desktop client)
+### TODO - Talk about setting up the controller on the client
+To send the robot forward 2 m/s (for testing purposes), utilize this twist message publisher in a new (sourced) terminal
+```bash
+ros2 topic pub -r 10 /diff_drive_base/cmd_vel geometry_msgs/TwistStamped \ "{header: {frame_id: base_link}, twist: {linear: {x: 0.2}, angular: {z: 0.0}}}"
+```
+
+
 ## Support
+
+
 
 
 ## Purchase
