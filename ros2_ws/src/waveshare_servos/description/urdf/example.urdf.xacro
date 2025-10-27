@@ -1,77 +1,73 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="waveshare_servos">
-    <xacro:arg name="prefix" default="" />
 
-    <material name="white">
-        <color rgba="1 1 1 1" />
-    </material>
+  <!-- Tunables: set to your real geometry -->
+  <xacro:property name="wheel_radius" value="0.050"/>      <!-- 5 cm -->
+  <xacro:property name="wheel_width"  value="0.020"/>      <!-- 2 cm -->
+  <xacro:property name="wheel_sep"    value="0.280"/>      <!-- distance between wheel centers -->
+  <xacro:property name="base_x"       value="0.20"/>
+  <xacro:property name="base_y"       value="0.16"/>
+  <xacro:property name="base_z"       value="0.06"/>       <!-- base height (centered) -->
+  <xacro:property name="wheel_z"      value="${wheel_radius}"/>
 
-    <link name="base_link">
-        <visual>
-            <origin xyz="0 0 0.15"/>
-            <geometry>
-                <box size="0.1 0.1 0.3"/>
-            </geometry>
-            <material name="white"/>
-        </visual>
-    </link>
+  <!-- Base -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 ${wheel_z}"/>
+      <geometry>
+        <box size="${base_x} ${base_y} ${base_z}"/>
+      </geometry>
+      <material name="white"><color rgba="1 1 1 1"/></material>
+    </visual>
+    <inertial>
+      <origin xyz="0 0 ${wheel_z}"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.02" iyy="0.02" izz="0.02" ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
 
-    <joint name="joint1" type="revolute">
-        <axis xyz="0 0 1"/>
-        <limit effort="1000.0" lower="-1.570796" upper="1.570796" velocity="0.5"/>
-        <origin xyz="0 0 0.3"/>
-        <parent link="base_link"/>
-        <child link="link2"/>
-    </joint>
+  <!-- LEFT WHEEL -->
+  <link name="left_wheel_link">
+    <visual>
+      <!-- Cylinder axis is along Z by default; rotate to align with Y -->
+      <origin xyz="0 ${wheel_sep/2} ${wheel_z}" rpy="1.57079632679 0 0"/>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <material name="black"><color rgba="0.1 0.1 0.1 1"/></material>
+    </visual>
+  </link>
+  <joint name="left_wheel_joint" type="continuous">
+    <!-- ROS REP-103: x forward, y left, z up; wheels rotate about +Y -->
+    <parent link="base_link"/>
+    <child link="left_wheel_link"/>
+    <origin xyz="0 ${wheel_sep/2} ${wheel_z}"/>
+    <axis xyz="0 1 0"/>
+    <limit velocity="100.0" effort="0.0"/>
+  </joint>
 
-    <link name="link2">
-        <visual>
-            <origin xyz="0 0 0.15"/>
-            <geometry>
-                <box size="0.1 0.1 0.3"/>
-            </geometry>
-            <material name="white"/>
-        </visual>
-    </link>
+  <!-- RIGHT WHEEL -->
+  <link name="right_wheel_link">
+    <visual>
+      <origin xyz="0 -${wheel_sep/2} ${wheel_z}" rpy="1.57079632679 0 0"/>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <material name="black"><color rgba="0.1 0.1 0.1 1"/></material>
+    </visual>
+  </link>
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="right_wheel_link"/>
+    <origin xyz="0 -${wheel_sep/2} ${wheel_z}"/>
+    <axis xyz="0 1 0"/>
+    <limit velocity="100.0" effort="0.0"/>
+  </joint>
 
-    <joint name="joint2" type="revolute">
-        <axis xyz="1 0 0"/>
-        <limit effort="1000.0" lower="-1.570796" upper="1.570796" velocity="0.5"/>
-        <origin rpy="0 0 0" xyz="0 0 0.3"/>
-        <parent link="link2"/>
-        <child link="link3"/>
-    </joint>
-
-    <link name="link3">
-        <visual>
-            <origin xyz="0 0 0.15"/>
-            <geometry>
-                <box size="0.1 0.1 0.3"/>
-            </geometry>
-            <material name="white"/>
-        </visual>
-    </link>
-
-    <joint name="joint3" type="continuous">
-        <axis xyz="0 0 1"/>
-        <limit effort="1000.0" lower="-3.14" upper="3.14" velocity="1.0"/>
-        <origin xyz="0 0 0.3"/>
-        <parent link="link3"/>
-        <child link="link4"/>
-    </joint>
-
-    <link name="link4">
-        <visual>
-            <origin xyz="0 0 0.05"/>
-            <geometry>
-                <cylinder length="0.1" radius="0.1"/>
-            </geometry>
-            <material name="white"/>
-        </visual>
-    </link>
-
-    <xacro:include filename="$(find waveshare_servos)/description/ros2_control/example.ros2_control.xacro"/>
-
-    <xacro:example_ws_ros2_control name="example_ws_ros2_control" prefix="$(arg prefix)"/>
+  <!-- ros2_control hardware mapping (your plugin + servo IDs) -->
+  <xacro:include filename="$(find waveshare_servos)/description/ros2_control/example.ros2_control.xacro"/>
+  <xacro:example_ws_ros2_control name="example_ws_ros2_control" 
+                                 left_joint_name="left_wheel_joint" left_id="2"
+                                 right_joint_name="right_wheel_joint" right_id="1"/>
 
 </robot>

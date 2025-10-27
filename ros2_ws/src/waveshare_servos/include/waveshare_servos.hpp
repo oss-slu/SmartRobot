@@ -63,6 +63,7 @@ private:
     double get_temperature(int ID);
     void write_pos();
     void write_vel();
+    
 
     // motor variables
     int baudrate_ = 115200; // was 1000000
@@ -78,9 +79,12 @@ private:
 	std::vector<u8> vel_ids_;
     std::vector<int> pos_is_;
     std::vector<int> vel_is_;
+    
     // command interface variables
     std::vector<double> pos_cmds_;
     std::vector<double> vel_cmds_;
+    std::vector<double> cmd_sign_;
+
     // state interface variables
     std::vector<double> pos_states_;
     std::vector<double> vel_states_;
