@@ -58,13 +58,6 @@ def generate_launch_description():
         parameters=[robot_description],
     )
 
-    # Optional GUI joint state publisher
-    joint_state_publisher_node = Node(
-        package="joint_state_publisher_gui",
-        executable="joint_state_publisher_gui",
-        condition=IfCondition(gui),
-    )
-
     # RViz
     rviz_node = Node(
         package="rviz2",

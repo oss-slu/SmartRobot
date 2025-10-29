@@ -1,6 +1,7 @@
 controller_manager:
   ros__parameters:
-    update_rate: 20
+    #6hz to match 150~ ms forced
+    update_rate: 6
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster

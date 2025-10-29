@@ -107,6 +107,13 @@ hardware_interface::CallbackReturn WaveshareServos::on_init(
 	// create vectors for command interfaces
 	pos_cmds_.resize(all_ids_.size(), std::numeric_limits<double>::quiet_NaN());
 	vel_cmds_.resize(all_ids_.size(), std::numeric_limits<double>::quiet_NaN());
+
+	// ---- ADDED (unwrap state storage) ----
+	last_raw_.resize(all_ids_.size(), std::numeric_limits<double>::quiet_NaN());
+	rev_count_.resize(all_ids_.size(), 0);
+	last_pos_meas_.resize(all_ids_.size(), std::numeric_limits<double>::quiet_NaN());
+	// -------------------------------------
+
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -216,15 +223,43 @@ hardware_interface::CallbackReturn WaveshareServos::on_deactivate(
 }
 
 hardware_interface::return_type WaveshareServos::read(
-	const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
+	const rclcpp::Time & /*time*/, const rclcpp::Duration & period)  // <-- use period
 {
+	const double dt = std::max(1e-6, period.seconds());               // <-- added
+
 	for (size_t i = 0; i < all_ids_.size(); i++)
 	{
-		double raw_pos = get_position(all_ids_[i]);      // inverted for ID=2
-    	pos_states_[i] = raw_pos - pos_offsets_[i];
-		vel_states_[i] = get_velocity(all_ids_[i]);      // inverted for ID=2
-		torq_states_[i] = get_torque(all_ids_[i]);
-		temp_states_[i] = get_temperature(all_ids_[i]);
+		const int id = all_ids_[i];
+
+		// ---- CHANGED: unwrap raw servo angle (no sign) ----
+		double raw_no_sign = sm_st.ReadPos(id) * 2.0 * M_PI / steps_;  // [0, 2π)
+		if (!std::isfinite(last_raw_[i])) {
+			last_raw_[i] = raw_no_sign;  // first sample
+		} else {
+			double d = raw_no_sign - last_raw_[i];
+			if (d >  M_PI) rev_count_[i] -= 1;  // crossed 2π -> 0
+			if (d < -M_PI) rev_count_[i] += 1;  // crossed 0  -> 2π
+			last_raw_[i] = raw_no_sign;
+		}
+		double unwrapped = raw_no_sign + rev_count_[i] * 2.0 * M_PI;
+
+		// apply sign (ID==2 inverted) and your configured offset
+		const double sign = (id == 2) ? -1.0 : 1.0;
+		const double pos_meas = sign * unwrapped - pos_offsets_[i];
+
+    	pos_states_[i] = pos_meas;
+
+		// ---- CHANGED: velocity from unwrapped position (consistent & spike-free) ----
+		if (std::isfinite(last_pos_meas_[i])) {
+			vel_states_[i] = (pos_meas - last_pos_meas_[i]) / dt;
+		} else {
+			vel_states_[i] = 0.0;
+		}
+		last_pos_meas_[i] = pos_meas;
+		// ----------------------------------------------------
+
+		torq_states_[i] = get_torque(id);
+		temp_states_[i] = get_temperature(id);
 	}
 	return hardware_interface::return_type::OK;
 }
