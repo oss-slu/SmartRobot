@@ -69,7 +69,7 @@ socket.on('robot_status', (data) => {
   }
 });
 
-// Command buttons - FIXED VERSION
+// Command buttons
 document.querySelectorAll('[data-cmd]').forEach(btn => {
   btn.addEventListener('click', () => {
     if (!connected) {
@@ -87,9 +87,8 @@ document.querySelectorAll('[data-cmd]').forEach(btn => {
     else if (cmd === 'move_left') commandText = 'move left';
     else if (cmd === 'move_right') commandText = 'move right';
     else if (cmd === 'stop') commandText = 'stop';
-    
-    addLog('cmd', `Sending: ${commandText} @ ${speed}%`);
-    socket.emit('send_command', { command: commandText, speed: Number(speed) });
+
+    socket.emit('send_command', { command: commandText });
   });
 });
 
