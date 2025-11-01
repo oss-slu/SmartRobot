@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <limits>  // for quiet_NaN
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -106,6 +107,13 @@ hardware_interface::CallbackReturn WaveshareServos::on_init(
 	// create vectors for command interfaces
 	pos_cmds_.resize(all_ids_.size(), std::numeric_limits<double>::quiet_NaN());
 	vel_cmds_.resize(all_ids_.size(), std::numeric_limits<double>::quiet_NaN());
+
+	// ---- ADDED (unwrap state storage) ----
+	last_raw_.resize(all_ids_.size(), std::numeric_limits<double>::quiet_NaN());
+	rev_count_.resize(all_ids_.size(), 0);
+	last_pos_meas_.resize(all_ids_.size(), std::numeric_limits<double>::quiet_NaN());
+	// -------------------------------------
+
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -194,7 +202,7 @@ hardware_interface::CallbackReturn WaveshareServos::on_activate(
 	// set position commands to current positions before any movement to not move on start
 	for (size_t i = 0; i < all_ids_.size(); i++)
   	{
-    	double init_raw_pos = get_position(all_ids_[i]);
+    	double init_raw_pos = get_position(all_ids_[i]);  // returns inverted for ID=2
     	pos_cmds_[i] = init_raw_pos - pos_offsets_[i];
 	}
 	return hardware_interface::CallbackReturn::SUCCESS;
@@ -215,15 +223,43 @@ hardware_interface::CallbackReturn WaveshareServos::on_deactivate(
 }
 
 hardware_interface::return_type WaveshareServos::read(
-	const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
+	const rclcpp::Time & /*time*/, const rclcpp::Duration & period)  // <-- use period
 {
+	const double dt = std::max(1e-6, period.seconds());               // <-- added
+
 	for (size_t i = 0; i < all_ids_.size(); i++)
 	{
-		double raw_pos = get_position(all_ids_[i]);
-    	pos_states_[i] = raw_pos - pos_offsets_[i];
-		vel_states_[i] = get_velocity(all_ids_[i]);
-		torq_states_[i] = get_torque(all_ids_[i]);
-		temp_states_[i] = get_temperature(all_ids_[i]);
+		const int id = all_ids_[i];
+
+		// ---- CHANGED: unwrap raw servo angle (no sign) ----
+		double raw_no_sign = sm_st.ReadPos(id) * 2.0 * M_PI / steps_;  // [0, 2π)
+		if (!std::isfinite(last_raw_[i])) {
+			last_raw_[i] = raw_no_sign;  // first sample
+		} else {
+			double d = raw_no_sign - last_raw_[i];
+			if (d >  M_PI) rev_count_[i] -= 1;  // crossed 2π -> 0
+			if (d < -M_PI) rev_count_[i] += 1;  // crossed 0  -> 2π
+			last_raw_[i] = raw_no_sign;
+		}
+		double unwrapped = raw_no_sign + rev_count_[i] * 2.0 * M_PI;
+
+		// apply sign (ID==2 inverted) and your configured offset
+		const double sign = (id == 2) ? -1.0 : 1.0;
+		const double pos_meas = sign * unwrapped - pos_offsets_[i];
+
+    	pos_states_[i] = pos_meas;
+
+		// ---- CHANGED: velocity from unwrapped position (consistent & spike-free) ----
+		if (std::isfinite(last_pos_meas_[i])) {
+			vel_states_[i] = (pos_meas - last_pos_meas_[i]) / dt;
+		} else {
+			vel_states_[i] = 0.0;
+		}
+		last_pos_meas_[i] = pos_meas;
+		// ----------------------------------------------------
+
+		torq_states_[i] = get_torque(id);
+		temp_states_[i] = get_temperature(id);
 	}
 	return hardware_interface::return_type::OK;
 }
@@ -231,16 +267,38 @@ hardware_interface::return_type WaveshareServos::read(
 hardware_interface::return_type WaveshareServos::write(
 	const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
+	// position-mode servos
 	for (size_t i = 0; i < pos_is_.size(); i++)
 	{
-		double pos = pos_cmds_[pos_is_[i]] + pos_offsets_[pos_is_[i]];
-		p_pos_ar_[i] = (pos * steps_) / (2 * M_PI);
-		p_vel_ar_[i] = (vel_cmds_[pos_is_[i]] * steps_) / (2 * M_PI);
+		// Determine sign based on the actual servo ID for this index
+		const int servo_id = pos_ids_[i];
+		const double sign = (servo_id == 2) ? -1.0 : 1.0;
+
+		// Desired robot-frame absolute angle is (cmd + offset).
+		// Servo-frame target should flip sign for ID=2.
+		double robot_target = pos_cmds_[pos_is_[i]] + pos_offsets_[pos_is_[i]];
+		double servo_target = sign * robot_target;
+
+		p_pos_ar_[i] = static_cast<s16>((servo_target * steps_) / (2 * M_PI));
+
+		// For position-mode speed, many servos expect magnitude (u16). Use abs().
+		double robot_speed = vel_cmds_[pos_is_[i]];
+		double servo_speed_mag = std::abs(sign * robot_speed);
+		p_vel_ar_[i] = static_cast<u16>((servo_speed_mag * steps_) / (2 * M_PI));
 	}
+
+	// wheel-mode servos (velocity control)
 	for (size_t i = 0; i < vel_is_.size(); i++)
 	{
-		v_vel_ar_[i] = (vel_cmds_[vel_is_[i]] * steps_) / (2 * M_PI);
+		const int servo_id = vel_ids_[i];
+		const double sign = (servo_id == 2) ? -1.0 : 1.0;
+
+		double robot_vel = vel_cmds_[vel_is_[i]];
+		double servo_vel = sign * robot_vel;
+
+		v_vel_ar_[i] = static_cast<s16>((servo_vel * steps_) / (2 * M_PI));
 	}
+
     sm_st.SyncWritePosEx(p_ids_pnt_, static_cast<u8>(pos_ids_.size()), 
 		p_pos_ar_, p_vel_ar_, p_acc_ar_); 
 	sm_st.SyncWriteSpe(v_ids_pnt_, static_cast<u8>(vel_ids_.size()), 
@@ -262,16 +320,19 @@ hardware_interface::CallbackReturn WaveshareServos::on_cleanup(
 
 double WaveshareServos::get_position(int ID)
 {
+    // Flip sign for motor ID 2 so robot-frame position is negated
     double pos = sm_st.ReadPos(ID) * 2 * M_PI / steps_;
+    if (ID == 2) pos = -pos;
     return pos;
 }
 
 double WaveshareServos::get_velocity(int ID)
 {
+    // Flip sign for motor ID 2 so robot-frame velocity is negated
     double vel = sm_st.ReadSpeed(ID) * 2 * M_PI / steps_; // rads / s
+    if (ID == 2) vel = -vel;
     return vel;
 }
-
 
 double WaveshareServos::get_torque(int ID)
 {

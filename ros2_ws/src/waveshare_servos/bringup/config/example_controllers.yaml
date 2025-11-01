@@ -1,34 +1,49 @@
 controller_manager:
   ros__parameters:
-    update_rate: 100
+    #6hz to match 150~ ms forced
+    update_rate: 6
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
+    diff_drive_base:
+      type: diff_drive_controller/DiffDriveController
 
-    joint_trajectory_velocity_controller:
-      type: joint_trajectory_controller/JointTrajectoryController
 
-
-joint_trajectory_velocity_controller:
+diff_drive_base:
   ros__parameters:
-    joints:
-      - joint1
-      - joint2
-    
-    command_interfaces:
-      - velocity
-    
-    state_interfaces:
-      - position
-      - velocity
+    # Wheel joint names (match URDF + ros2_control)
+    left_wheel_names:  ["left_wheel_joint"]
+    right_wheel_names: ["right_wheel_joint"]
 
-    state_publish_rate: 200.0 # Defaults to 50
-    action_monitor_rate: 20.0 # Defaults to 20
+    # Geometry (MUST match your URDF)
+    wheel_separation: 0.280         # meters
+    wheel_radius:     0.050         # meters
 
-    allow_partial_joints_goal: false # Defaults to false
-    open_loop_control: true
-    allow_integration_in_goal_trajectories: true
-    constraints:
-      stopped_velocity_tolerance: 0.01 # Defaults to 0.01
-      goal_time: 0.0 # Defaults to 0.0 (start immediately)
+    # Frames & topics
+    base_frame_id: base_link
+    odom_frame_id: odom
+    enable_odom_tf: true
+    publish_wheel_data: true
+
+    # Command interface
+    use_stamped_vel: false          # publishes /diff_drive_base/cmd_vel_unstamped
+    cmd_vel_timeout: 0.5
+    velocity_rolling_window_size: 10
+
+    # Limits (adjust as needed)
+    linear:
+      x:
+        has_velocity_limits: true
+        max_velocity: 0.6
+        has_acceleration_limits: true
+        max_acceleration: 1.0
+    angular:
+      z:
+        has_velocity_limits: true
+        max_velocity: 2.0
+        has_acceleration_limits: true
+        max_acceleration: 3.0
+
+    # If your hardware doesn't give good velocity feedback, uncomment:
+    # open_loop: true

@@ -64,6 +64,13 @@ private:
     void write_pos();
     void write_vel();
 
+
+    // for wrapping around 2pi (cont. joint states)
+    std::vector<double> last_raw_;
+    std::vector<long long> rev_count_;
+    std::vector<double> last_pos_meas_;
+        
+
     // motor variables
     int baudrate_ = 115200; // was 1000000
     std::string port_ = "/dev/ttyUSB0"; // /dev/ttyTHS1 if using UART
@@ -78,9 +85,12 @@ private:
 	std::vector<u8> vel_ids_;
     std::vector<int> pos_is_;
     std::vector<int> vel_is_;
+    
     // command interface variables
     std::vector<double> pos_cmds_;
     std::vector<double> vel_cmds_;
+    std::vector<double> cmd_sign_;
+
     // state interface variables
     std::vector<double> pos_states_;
     std::vector<double> vel_states_;
