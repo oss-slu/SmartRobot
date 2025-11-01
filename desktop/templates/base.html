@@ -9,14 +9,19 @@
 </head>
 <body>
     <header>
-        <h1>SMARTRobot</h1>
+        <div class="brand">
+            <img class="brand-logo" src="{{ url_for('static', filename='img/morph-logo.svg') }}" alt="MORPH logo">
+            <span class="brand-name">MORPH</span>
+        </div>
         <nav>
             <a href="/">Home</a>
             <a href="/about">About</a>
             <a href="/learning">Learning</a>
-            <a href="/my-robot">My Robot</a>
+            <a href="/my_robot">My Robot</a>
+            <a href="/shop">Shop</a>
             <a href="/contact">Contact</a>
         </nav>
+        
     </header>
 
     <main>

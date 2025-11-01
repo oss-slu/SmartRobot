@@ -1,6 +1,54 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <h2>Welcome to SMARTRobot</h2>
-    <p>SLU Mobile Autonomous Robotics Toolkit</p>
+  <section class="hero">
+    <div class="hero-inner">
+      <div class="hero-title">
+        <h2>MORPH</h2>
+        <p class="subtitle">MORPH (modular open-source robotic programming hub),</p>
+      </div>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="/my_robot">Open Control Panel</a>
+        <a class="btn btn-ghost" href="#about">Explore MORPH</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="about" class="info-grid">
+    <article class="card">
+      <h3>About MORPH</h3>
+      <p>
+        MORPH is a modular open-source robotic programming hub.....................................................................
+      </p>
+    </article>
+
+    <article id="why-us" class="card">
+      <h3>Our Mission</h3>
+      <ul class="list">
+        <li>.....................................................</li>
+        <li>.....................................................</li>
+        <li>........................................................</li>
+      </ul>
+    </article>
+
+    <article id="shop" class="card">
+      <h3>Shop Our Product</h3>
+      <p>
+        Get MORPH base kits, expansion modules, and accessories. Pre-configured to work out of the box.
+      </p>
+      <div class="card-actions">
+        <a class="btn btn-primary" href="/shop">Visit Shop</a>
+      </div>
+    </article>
+  </section>
+
+  <section id="schools" class="cta-band">
+    <div class="cta-inner">
+      <h3>Bring MORPH to Your School</h3>
+      <p class="cta-desc">
+        Curriculum-ready kits, educator guides, and workshops to jumpstart robotics programs.
+      </p>
+      <a class="btn btn-accent btn-lg" href="/contact">Contact Us</a>
+    </div>
+  </section>
 {% endblock %}

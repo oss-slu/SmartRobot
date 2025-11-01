@@ -1,0 +1,48 @@
+<!-- templates/loading.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMARTRobot — Loading</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/loading.css') }}">
+</head>
+<body>
+    <a class="loading-brand" href="/home" aria-label="Go to Home">
+    <img src="{{ url_for('static', filename='img/morph-logo.svg') }}" alt="MORPH logo">
+    <span>MORPH</span>
+    </a>
+    <div class="scene">
+        <div class="robot" id="robot">
+            <div class="robot-face">
+                <div class="eye left">
+                    <div class="pupil"></div>
+                    <div class="specular"></div>
+                </div>
+                <div class="eye right">
+                    <div class="pupil"></div>
+                    <div class="specular"></div>
+                </div>
+                <div class="mouth"></div>
+                <div class="antenna">
+                    <div class="tip"></div>
+                </div>
+            </div>
+            <div class="shadow"></div>
+        </div>
+
+        <div class="loader" id="loader">
+            <div class="bar">
+                <div class="fill" id="fill"></div>
+            </div>
+            <div class="percent" id="percent">0%</div>
+        </div>
+
+        <button class="start-btn" id="start-btn" data-target="/home" aria-hidden="true">
+            Start
+        </button>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/loading.js') }}"></script>
+</body>
+</html>

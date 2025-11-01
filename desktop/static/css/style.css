@@ -1,61 +1,177 @@
-body {
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 0;
+/* ---- MORPH theme (aligns with loading page) ---- */
+:root {
+  --bg1: #0a1f44;
+  --bg2: #0d2a66;
+  --glow: #4fc3ff;
+  --glow-2: #8ad7ff;
+  --card: rgba(13, 42, 102, 0.55);
+  --card-border: rgba(138,215,255,.18);
+  --text: #eaf6ff;
+  --muted: #cfeaff;
 }
 
-header, footer {
-    background-color: #222;
-    color: #fff;
-    padding: 1rem;
-    text-align: center;
+html, body {
+  background: radial-gradient(1200px 800px at 50% 10%, #123a7a, var(--bg1)) fixed;
+  color: var(--text);
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
 }
 
-nav a {
-    color: #fff;
-    margin: 0 1rem;
-    text-decoration: none;
+/* Header from earlier logo work */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  background:
+    radial-gradient(800px 300px at 50% 0%, rgba(79,195,255,.08), transparent),
+    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.25));
+  border-bottom: 1px solid rgba(138,215,255,.15);
+}
+header nav a {
+  color: var(--text);
+  text-decoration: none;
+  margin-left: 12px;
+  opacity: .9;
+}
+header nav a:hover {
+  text-decoration: underline;
 }
 
+/* Layout containers */
 main {
-    padding: 2rem;
-    text-align: center;
+  padding: 32px 16px 56px;
 }
 
-/* My Robot Dashboard */
-.controls {
-    margin-bottom: 1em;
+/* Hero */
+.hero {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 28px 12px 8px;
+  background:
+    radial-gradient(800px 300px at 50% 0%, rgba(79,195,255,.12), transparent),
+    linear-gradient(180deg, transparent, rgba(0,0,0,.15));
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.25), inset 0 2px 12px rgba(255,255,255,.04);
+  border: 1px solid rgba(138,215,255,.15);
+}
+.hero-inner {
+  max-width: 920px;
+  width: 100%;
+}
+.hero-title h2 {
+  font-size: clamp(28px, 5vw, 40px);
+  margin: 0 0 8px 0;
+  letter-spacing: .06em;
+  text-shadow: 0 2px 10px rgba(0,0,0,.35);
+}
+.subtitle {
+  margin: 0;
+  color: var(--muted);
+  opacity: .95;
 }
 
-button {
-    margin: 0.5em;
-    padding: 1em 2em;
-    font-size: 1.1em;
-    border: none;
-    border-radius: 6px;
-    background: #0077cc;
-    color: white;
-    cursor: pointer;
+/* Buttons */
+.btn {
+  display: inline-block;
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(138,215,255,.35);
+  text-decoration: none;
+  font-weight: 700;
+  letter-spacing: .04em;
+  transition: transform .18s ease, box-shadow .18s ease, opacity .25s ease;
+  margin: 12px 8px 0;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn-primary {
+  background: linear-gradient(160deg, #0f4aa0, #0b2f60);
+  color: var(--text);
+  box-shadow: 0 10px 24px rgba(0,0,0,.35), 0 0 18px rgba(79,195,255,.25) inset;
+}
+.btn-ghost {
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  box-shadow: inset 0 0 0 999px rgba(255,255,255,0.02);
 }
 
-button:hover {
-    background: #005fa3;
+/* Info cards */
+.info-grid {
+  margin: 28px auto 0;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  max-width: 1100px;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 16px 16px 14px;
+  box-shadow:
+    inset 0 2px 12px rgba(255,255,255,.04),
+    0 16px 40px rgba(0,0,0,.35);
+}
+.card h3 {
+  margin: 0 0 8px 0;
+  letter-spacing: .04em;
+}
+.card p {
+  margin: 0;
+  color: var(--muted);
+}
+.list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+.list li { margin: 4px 0; }
+
+/* Sections layout */
+.info-grid {
+  margin: 28px auto 0;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  max-width: 1100px;
 }
 
-/* Status panel */
-.status-panel {
-    margin-top: 1em;
-    font-weight: bold;
-    color: #007700;
+/* Card actions */
+.card-actions { margin-top: 10px; }
+
+/* CTA band */
+.cta-band {
+  margin: 28px auto 0;
+  padding: 24px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(138,215,255,.18);
+  background:
+    radial-gradient(900px 320px at 50% 0%, rgba(79,195,255,.14), transparent),
+    linear-gradient(180deg, rgba(255,255,255,.03), rgba(0,0,0,.22));
+  box-shadow: 0 24px 60px rgba(0,0,0,.25), inset 0 2px 12px rgba(255,255,255,.04);
+}
+.cta-inner {
+  max-width: 980px;
+  margin: 0 auto;
+  text-align: center;
+}
+.cta-desc { color: var(--muted); margin: 6px 0 16px; }
+
+/* Accent button (for Contact Us) */
+.btn-lg {
+  padding: 12px 22px;
+  font-size: 1.02rem;
+}
+.btn-accent {
+  background: linear-gradient(160deg, var(--glow-2), var(--glow));
+  color: #08213f;
+  border-color: rgba(255,255,255,.45);
+  box-shadow: 0 10px 26px rgba(79,195,255,.35), 0 0 20px rgba(79,195,255,.25) inset;
+}
+.btn-accent:hover {
+  filter: brightness(1.05);
 }
 
-/* ROS log */
-.ros-log {
-    background: #111;
-    color: #0f0;
-    padding: 1em;
-    height: 200px;
-    overflow: auto;
-    border-radius: 6px;
-    margin-top: 1em;
-}
+/* Smooth anchor scrolling */
+html { scroll-behavior: smooth; }
