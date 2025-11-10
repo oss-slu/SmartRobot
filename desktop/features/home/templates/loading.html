@@ -5,11 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SMARTRobot — Loading</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/loading.css') }}">
+    <link rel="stylesheet" href="{{ url_for('home.static', filename='css/loading.css') }}">
 </head>
 <body>
     <a class="loading-brand" href="/home" aria-label="Go to Home">
-    <img src="{{ url_for('static', filename='img/morph-logo.svg') }}" alt="MORPH logo">
+    <img src="{{ url_for('static', filename='img/morph_logo.svg') }}" alt="MORPH logo">
     <span>MORPH</span>
     </a>
     <div class="scene">
@@ -43,6 +43,7 @@
         </button>
     </div>
 
-    <script src="{{ url_for('static', filename='js/loading.js') }}"></script>
+    <script src="{{ url_for('home.static', filename='js/loading.js') }}"></script>
 </body>
 </html>
+

@@ -1,4 +1,4 @@
-# **SMART: SLU Mobile Autonomous Robotics Toolkit**
+# **MORPH**
 ## A learning robot kit.
 
 ## Getting Started (ROS2 Jazzy)

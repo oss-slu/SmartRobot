@@ -1,0 +1,40 @@
+Hi there, old or new fellows trying to add/ delete something from this codebase
+I don't know how big the project will be, go big or go home
+but if you're contributing to this project, welcome and I recommend you to
+read this before doing anything
+First, let do headcount
+
+NUM_PEOPLE_READ_THIS_NOTE = 1
+NUM_PEOPLE_MODIFY_THIS_NOTE= 1
+
+NOTE: (welcome to add more notes as the project growing)
+ 1. If you feel lost, read #IF_YOU_WANT
+ 2. If you vibe-code with Cusor (or something similar), be careful with Agent mode
+ rec to use Ask mode first and selectively modify on your own
+ 3. Think carefully before touching \desktop\foxglove
+ 3. Did you read Contributing_Guide and ISSUE_TEMPLATE?
+ 4. Love interactive design, feel free to pitch/add your cool ideas (but read note 3. again)
+
+#IF_YOU_WANT
+1.Add a new page	
+Create desktop\features\[page_name]\ folder
+Create __init__.py with blueprint
+Create routes.py with route function (HTTP route)
+Create template (specific for this page): features\[page_name]\templates\[feature_name].html
+Create static (specific for this page): features\[feature_name]\static\(.css or .js)
+Register blueprint in desktop/setup.py
+
+
+3.Deal with everything on Control Panel (or My Robot page)
+- Control panel URL-->features/my_robot/routes.py
+- UI layout/structure-->features/my_robot/templates/my_robot.html
+- Styling (colors, layout)-->features/my_robot/static/css/my_robot.css
+- Button behavior (frontend)-->features/my_robot/static/js/websocket.js
+- WebSocket events (backend)-->features/my_robot/socket_handlers.py
+- Movement commands-->utils/command_converter.py
+- Movement speeds-->config.py
+- Robot IP/port-->config.py
+- Robot communication-->foxglove/bridge.py
+
+3. Add content for landing page
+Look at \desktop\features\home\templates\index.html

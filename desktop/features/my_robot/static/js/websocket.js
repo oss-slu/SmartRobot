@@ -5,13 +5,13 @@ let connected = false; // This will be updated when we check status
 // UI Elements
 const connectBtn = document.getElementById('connect-btn');
 const disconnectBtn = document.getElementById('disconnect-btn');
-const statusDot = document.getElementById('status-dot');
-const statusText = document.getElementById('status-text');
 const robotIp = document.getElementById('robot-ip');
 const logEl = document.getElementById('activity-log');
 
 // Logging function
 function addLog(kind, text) {
+  if (!logEl) return; // Safety check
+  
   const item = document.createElement('div');
   item.className = 'log-item';
   
@@ -39,17 +39,32 @@ function addLog(kind, text) {
 // Update connection status
 function updateStatus(isConnected) {
   connected = isConnected;
-  if (isConnected) {
-    statusDot.className = 'dot dot-green';
-    statusText.textContent = 'Connected to ' + robotIp.value;
-    connectBtn.disabled = true;
-    disconnectBtn.disabled = false;
-  } else {
-    statusDot.className = 'dot dot-red';
-    statusText.textContent = 'Disconnected';
-    connectBtn.disabled = false;
-    disconnectBtn.disabled = true;
+  if (connectBtn && disconnectBtn) {
+    if (isConnected) {
+      connectBtn.disabled = true;
+      disconnectBtn.disabled = false;
+    } else {
+      connectBtn.disabled = false;
+      disconnectBtn.disabled = true;
+    }
   }
+}
+
+// Connect button handler
+if (connectBtn) {
+  connectBtn.addEventListener('click', () => {
+    const ip = robotIp ? robotIp.value : '10.178.43.127';
+    socket.emit('connect_robot', { ip: ip });
+    addLog('info', `Attempting to connect to ${ip}...`);
+  });
+}
+
+// Disconnect button handler
+if (disconnectBtn) {
+  disconnectBtn.addEventListener('click', () => {
+    socket.emit('disconnect_robot');
+    addLog('info', 'Disconnecting from robot...');
+  });
 }
 
 // Check robot status when page loads
@@ -62,11 +77,17 @@ socket.on('connect', () => {
 socket.on('robot_status', (data) => {
   if (data.connected) {
     updateStatus(true);
-    addLog('success', 'Robot already connected!');
+    addLog('success', 'Robot connected!');
   } else {
     updateStatus(false);
     addLog('info', 'Robot not connected');
   }
+});
+
+// Handle robot disconnected event
+socket.on('robot_disconnected', () => {
+  updateStatus(false);
+  addLog('info', 'Robot disconnected');
 });
 
 // Command buttons
@@ -78,7 +99,7 @@ document.querySelectorAll('[data-cmd]').forEach(btn => {
     }
     
     const cmd = btn.getAttribute('data-cmd');
-    const speed = document.getElementById('speed').value;
+    const speed = document.getElementById('speed') ? document.getElementById('speed').value : 100;
     
     // Send the actual command text
     let commandText = '';
@@ -88,11 +109,11 @@ document.querySelectorAll('[data-cmd]').forEach(btn => {
     else if (cmd === 'move_right') commandText = 'move right';
     else if (cmd === 'stop') commandText = 'stop';
 
-    socket.emit('send_command', { command: commandText });
+    socket.emit('send_command', { command: commandText, speed: speed });
   });
 });
 
-// Other existing code...
+// Socket event handlers
 socket.on('disconnect', () => {
   addLog('warn', 'Disconnected from Flask server');
   updateStatus(false);
@@ -103,9 +124,11 @@ socket.on('ros_message', (data) => addLog('ros', JSON.stringify(data)));
 // Speed display
 const speed = document.getElementById('speed');
 const speedVal = document.getElementById('speed-val');
-speed.addEventListener('input', () => {
-  speedVal.textContent = speed.value + '%';
-});
+if (speed && speedVal) {
+  speed.addEventListener('input', () => {
+    speedVal.textContent = speed.value + '%';
+  });
+}
 
 // Tabs
 const tabs = document.querySelectorAll('.tab');
