@@ -37,10 +37,28 @@ def build_json_payload_for_string(data_text: str) -> bytes:
     encoded as UTF-8 bytes.
     """
     return json.dumps({"data": data_text}).encode("utf-8")
-
-async def client_advertise_string_json(ws, channel_id: int, topic="/command"):
+def parse_cdr_string(payload: bytes) -> str:
     """
-    Advertise a client-publish channel for std_msgs/msg/String using JSON encoding.
+    Parse CDR-encoded std_msgs/msg/String payload.
+    CDR format: [encapsulation_header(4)] [string_length(4)] [string_data]
+    """
+    if len(payload) < 8:
+        return "<invalid CDR payload>"
+    
+    # Skip encapsulation header (4 bytes)
+    # Read string length (little-endian uint32)
+    string_length = struct.unpack("<I", payload[4:8])[0]
+    
+    if len(payload) < 8 + string_length:
+        return "<truncated CDR payload>"
+    
+    # Extract string data
+    string_data = payload[8:8+string_length].decode("utf-8", errors="replace")
+    return string_data
+
+async def client_advertise_twist_json(ws, channel_id: int, topic="/diff_drive_base/cmd_vel"):
+    """
+    Advertise a client-publish channel for geometry_msgs/msg/TwistStamped using JSON encoding.
     """
     msg = {
         "op": "advertise",
@@ -48,14 +66,30 @@ async def client_advertise_string_json(ws, channel_id: int, topic="/command"):
             {
                 "id": channel_id,
                 "topic": topic,
-                "encoding": "json",                 # <--- JSON insead of cdr
-                "schemaName": "std_msgs/msg/String",
-                "schemaEncoding": "ros2msg",        # optional but nice
-                "schema": "string data\n",
+                "encoding": "json",
+                "schemaName": "geometry_msgs/msg/TwistStamped",
+                "schemaEncoding": "ros2msg",
+                "schema": (
+                    "std_msgs/msg/Header header\n"
+                    "  builtin_interfaces/msg/Time stamp\n"
+                    "    int32 sec\n"
+                    "    uint32 nanosec\n"
+                    "  string frame_id\n"
+                    "geometry_msgs/msg/Twist twist\n"
+                    "  geometry_msgs/msg/Vector3 linear\n"
+                    "    float64 x\n"
+                    "    float64 y\n"
+                    "    float64 z\n"
+                    "  geometry_msgs/msg/Vector3 angular\n"
+                    "    float64 x\n"
+                    "    float64 y\n"
+                    "    float64 z\n"
+                ),
             }
         ],
     }
     await ws.send(json.dumps(msg))
+
 
 # ---------------------------
 # Foxglove Bridge Client
@@ -63,18 +97,21 @@ async def client_advertise_string_json(ws, channel_id: int, topic="/command"):
 class FoxgloveBridge:
     def __init__(self):
         self.websocket = None
-        self.pi_ip = "10.178.43.127"   # <-- it changes!! check it!!
+        self.pi_ip = "10.178.43.127"   # <-- it changes!! check it!
         self.port = 8765
         self.running = False
         self.connected = False
         self.subscribed_topics = {}
         self.command_channel_id = 4     #just random num at the moment
+        self.connection_loop = None
         # Subscribe to server topics here, will add more in the future
-        self.topics_to_subscribe = ["/test_talker"]
+        self.topics_to_subscribe = ["/test_talker", "/diff_drive_base/odom"]
+        self.channel_info = {}  # channel_id → {topic, encoding, schemaName}
 
     async def connect_to_pi_server(self):
         """Connect to Foxglove WebSocket server on Raspberry Pi."""
         try:
+            self.connection_loop = asyncio.get_event_loop()  
             socketio.emit("log", f"Attempting to connect to {self.pi_ip}:{self.port} …")
             self.websocket = await websockets.connect(
                 f"ws://{self.pi_ip}:{self.port}",
@@ -131,6 +168,8 @@ class FoxgloveBridge:
                                 topic = ch.get("topic", "unknown")
                                 channel_id = ch.get("id")
                                 encoding = ch.get("encoding", "unknown")
+                                schema_name = ch.get("schemaName", "")
+                                self.channel_info[channel_id] = {"topic": topic, "encoding": encoding, "schemaName": schema_name}
                                 socketio.emit("log", f" • {topic} (channel={channel_id}, encoding={encoding})")
                                 if topic in self.topics_to_subscribe:
                                     await self.subscribe_to_channel(channel_id, topic)
@@ -162,14 +201,33 @@ class FoxgloveBridge:
                             })
                             socketio.emit("log", f"→ [{channel_id}] JSON @ {timestamp_ns} ns: {maybe_json}")
                         except Exception:
-                            # Not JSON, just show first bytes
-                            socketio.emit("ros_message", {
-                                "channel_id": channel_id,
-                                "timestamp_ns": timestamp_ns,
-                                "data": "<non-JSON payload>",
-                            })
-                            head = payload[:32]
-                            socketio.emit("log", f"→ [{channel_id}] Non-JSON payload ({len(payload)}B) @ {timestamp_ns} ns: {head.hex()} …")
+                            info = self.channel_info.get(channel_id, {})
+                            schema = info.get("schemaName")
+                            encoding = info.get("encoding")
+
+                            # Skip ROS log frames from /rosout to avoid noise
+                            if schema == "rcl_interfaces/msg/Log":
+                                continue
+
+                            if schema == "std_msgs/msg/String" and encoding == "cdr":
+                                try:
+                                    cdr_string = parse_cdr_string(payload)
+                                    socketio.emit("ros_message", {
+                                        "channel_id": channel_id,
+                                        "timestamp_ns": timestamp_ns,
+                                        "data": {"data": cdr_string},
+                                    })
+                                    socketio.emit("log", f"→ [{channel_id}] CDR @ {timestamp_ns} ns: {cdr_string}")
+                                except Exception:
+                                    socketio.emit("log", f"→ [{channel_id}] Unable to parse CDR String ({len(payload)}B)")
+                            else:
+                                head = payload[:32]
+                                socketio.emit("ros_message", {
+                                    "channel_id": channel_id,
+                                    "timestamp_ns": timestamp_ns,
+                                    "data": "<non-JSON payload>",
+                                })
+                                socketio.emit("log", f"→ [{channel_id}] {schema or 'unknown'} with {encoding or 'unknown'} encoding not decoded; first bytes: {head.hex()} …")
 
                 except json.JSONDecodeError as e:
                     socketio.emit("log", f"⚠️ JSON decode error: {e}")
@@ -189,7 +247,7 @@ class FoxgloveBridge:
             subscribe_msg = {
                 "op": "subscribe",
                 "subscriptions": [
-                    {"id": subscription_id, "channelId": channel_id, "topic": topic}
+                    {"id": subscription_id, "channelId": channel_id, "topic": topic, "encoding": "json"}
                 ],
             }
             await self.websocket.send(json.dumps(subscribe_msg))
@@ -198,68 +256,141 @@ class FoxgloveBridge:
         except Exception as e:
             socketio.emit("log", f"⚠️ Error subscribing to {topic}: {e}")
 
-    # ---- publishing (/command) using JSON ----
+    # ---- publishing (/command) using JSON for Twist ----
     async def start_command_sender_json(self):
-        """Advertise /command (JSON) and periodically send 'run'."""
+        """Advertise /command (JSON Twist)"""
         try:
-            await client_advertise_string_json(self.websocket, self.command_channel_id, "/command")
-            socketio.emit("log", f"✓ ClientAdvertised /command (JSON, channel {self.command_channel_id})")
+            await client_advertise_twist_json(self.websocket, self.command_channel_id, "/diff_drive_base/cmd_vel")
+            socketio.emit("log", f"✓ ClientAdvertised /command (JSON Twist, channel {self.command_channel_id})")
             await asyncio.sleep(0.2)
-
-            seq = 0
-            while self.running and self.connected:
-                payload = build_json_payload_for_string("run")
-                frame = (
-                    MESSAGE_DATA_OPCODE
-                    + struct.pack("<I", self.command_channel_id)  # channelId (LE)
-                    + payload                                      # JSON payload
-                )
-                await self.websocket.send(frame)
-                socketio.emit("log", f"→ Sent /command (JSON): 'run' (seq={seq})")
-                seq += 1
-                await asyncio.sleep(3.0)
-
+            
         except Exception as e:
             socketio.emit("log", f"✗ Error in command sender: {e}")
             traceback.print_exc()
 
+
+    async def send_twist_command_once(self, linear_x=0.0, linear_y=0.0, linear_z=0.0, 
+                                        angular_x=0.0, angular_y=0.0, angular_z=0.0,
+                                        frame_id="base_link"):
+        """Send a one-off JSON TwistStamped /command message"""
+        if not (self.connected and self.websocket):
+            socketio.emit("log", "⚠️ Not connected; cannot send command")
+            return
+        
+        # Get current timestamp
+        now = time.time()
+        sec = int(now)
+        nanosec = int((now - sec) * 1e9)
+        
+        twist_stamped_data = {
+            "header": {
+                "stamp": {
+                    "sec": 0,
+                    "nanosec": 0
+                },
+                "frame_id": frame_id
+            },
+            "twist": {
+                "linear": {"x": linear_x, "y": linear_y, "z": linear_z},
+                "angular": {"x": angular_x, "y": angular_y, "z": angular_z}
+            }
+        }
+        
+        payload = json.dumps(twist_stamped_data).encode("utf-8")
+        frame = MESSAGE_DATA_OPCODE + struct.pack("<I", self.command_channel_id) + payload
+        await self.websocket.send(frame)
+        socketio.emit("log", f"→ Sent /diff_drive_base/cmd_vel (TwistStamped): linear=({linear_x},{linear_y},{linear_z}), angular=({angular_x},{angular_y},{angular_z})")
+        
+
+            
 # Global instance
 foxglove_bridge = FoxgloveBridge()
 
 # ---------------------------
 # Flask routes
 # ---------------------------
-# @app.route("/")
-# def index():
-#     try:
-#         return render_template("loading.html")
-#     except Exception:
-#         return "Loading..."
-
-# @app.route("/home")
-# def home():
-#     try:
-#         return render_template("index.html")  
-#     except Exception:
-#         return "Home page not found."
-
 @app.route("/")
 def index():
-    return render_template("index.html")
+    try:
+        return render_template("loading.html")
+    except Exception:
+        return "Loading..."
+
+@app.route("/home")
+def home():
+    try:
+        return render_template("index.html")  
+    except Exception:
+        return "Home page not found."
+
 
 @app.route("/my_robot")
 def my_robot():
     return render_template("my_robot.html")
 
-@app.route("/status")
-def status():
-    return jsonify({"status": robot_status})
+@socketio.on("connect_robot")
+def handle_connect_robot(data):
+    """Handle robot connection request from UI"""
+    ip = data.get("ip", "10.178.43.127")
+    socketio.emit("log", f"UI requested connection to {ip}")
+    
+    # Update the bridge IP and trigger connection
+    foxglove_bridge.pi_ip = ip
+    loop = asyncio.get_event_loop()
+    loop.create_task(foxglove_bridge.connect_to_pi_server())
 
-@app.route("/set_status/<new_status>")
-def set_status(new_status):
-    global robot_status
-    robot_status = new_status
-    return jsonify({"status": robot_status})
+@socketio.on("disconnect_robot")
+def handle_disconnect_robot():
+    """Handle robot disconnection request from UI"""
+    socketio.emit("log", "UI requested disconnection")
+    foxglove_bridge.running = False
+    foxglove_bridge.connected = False
+    socketio.emit("robot_disconnected")
+
+@socketio.on("check_robot_status")
+def handle_check_robot_status():
+    """Check current robot connection status"""
+    socketio.emit("robot_status", {
+        "connected": foxglove_bridge.connected,
+        "ip": foxglove_bridge.pi_ip
+    })
+
+@socketio.on("send_command")
+def handle_send_command(data):
+    if not foxglove_bridge.connected:
+        socketio.emit("log", "⚠️ Not connected to robot!")
+        return
+    
+    cmd = data.get("command", "stop")
+    
+    # Convert command to Twist velocities
+    if cmd == "move up":
+        twist = {"linear_x": 0.5, "linear_y": 0.0, "linear_z": 0.0, 
+                "angular_x": 0.0, "angular_y": 0.0, "angular_z": 0.0}
+    elif cmd == "move down":
+        twist = {"linear_x": -0.5, "linear_y": 0.0, "linear_z": 0.0,
+                "angular_x": 0.0, "angular_y": 0.0, "angular_z": 0.0}
+    elif cmd == "move left":
+        twist = {"linear_x": 0.0, "linear_y": 0.0, "linear_z": 0.0,
+                "angular_x": 0.0, "angular_y": 0.0, "angular_z": 0.5}
+    elif cmd == "move right":
+        twist = {"linear_x": 0.0, "linear_y": 0.0, "linear_z": 0.0,
+                "angular_x": 0.0, "angular_y": 0.0, "angular_z": -0.5}
+    else:  # stop
+        twist = {"linear_x": 0.0, "linear_y": 0.0, "linear_z": 0.0,
+                "angular_x": 0.0, "angular_y": 0.0, "angular_z": 0.0}
+
+    socketio.emit("log", f"UI command: {cmd}")
+    
+    # Send TwistStamped command
+    if foxglove_bridge.connection_loop:
+        asyncio.run_coroutine_threadsafe(
+            foxglove_bridge.send_twist_command_once(**twist),
+            foxglove_bridge.connection_loop
+        )
+    else:
+        socketio.emit("log", "⚠️ No connection loop available!")
+
 
 # ---------------------------
 # Thread runner for the asyncio foxglove client
