@@ -54,4 +54,7 @@ Visit: http://127.0.0.1:5000/
 ….
 - Our code and circuit are open source. You can obtain the details and the latest information through visiting the following web site:
 
+
+## TODO
+- Link to our Wiki here, eventually refactor everything into wiki files
 ....
