@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/my_robot.css') }}">
+<link rel="stylesheet" href="{{ url_for('robot.static', filename='css/my_robot.css') }}">
 
 <div class="robot-layout">
   <!-- Left column -->
@@ -127,5 +127,6 @@
 
 <!-- SocketIO + external script -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
-<script src="{{ url_for('static', filename='js/websocket.js') }}"></script>
+<script src="{{ url_for('robot.static', filename='js/websocket.js') }}"></script>
 {% endblock %}
+
